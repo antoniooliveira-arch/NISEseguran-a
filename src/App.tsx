@@ -322,11 +322,12 @@ function LoginScreen({ onLogin }: { onLogin: (u: User) => void }) {
 
 /* ---------- ADMIN APP ---------- */
 function AdminApp({ currentUser, onLogout, store }: { currentUser: User; onLogout: () => void; store: ReturnType<typeof useLocalStore> }) {
-  const [view, setView] = useState<'dashboard'|'rondas'|'encaminhamentos'|'relatorios'|'usuarios'>('dashboard');
+  const [view, setView] = useState<'dashboard'|'rondas'|'encaminhamentos'|'relatorios'|'usuarios'|'monitoramento'>('dashboard');
   const [mobileMenu, setMobileMenu] = useState(false);
 
   const nav = [
     { k: 'dashboard', label: 'Painel Tático', icon: I.layout },
+    { k: 'monitoramento', label: 'Monitoramento', icon: I.bell },
     { k: 'rondas', label: 'Rondas', icon: I.list },
     { k: 'encaminhamentos', label: 'Encaminhamentos', icon: I.clip },
     { k: 'relatorios', label: 'Relatórios PDF', icon: I.file },
@@ -430,6 +431,7 @@ function AdminApp({ currentUser, onLogout, store }: { currentUser: User; onLogou
             <motion.div key={view} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .22 }}>
               {view === 'dashboard' && <AdminDashboard store={store} onOpenEnc={()=>setView('encaminhamentos')} />}
               {view === 'rondas' && <RondasList store={store} admin />}
+              {view === 'monitoramento' && <MonitoramentoBoard store={store} />}
               {view === 'encaminhamentos' && <EncaminhamentosBoard store={store} />}
               {view === 'relatorios' && <RelatoriosView store={store} />}
               {view === 'usuarios' && <UsuariosView store={store} />}
@@ -1107,6 +1109,10 @@ function MonitoramentoBoard({ store }: { store: ReturnType<typeof useLocalStore>
   const { encaminhamentos, setEncaminhamentos, rondas } = store;
   const [selected, setSelected] = useState<Encaminhamento | null>(null);
   const [nota, setNota] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [newSchool, setNewSchool] = useState(SCHOOLS[0].id);
+  const [newTitulo, setNewTitulo] = useState('');
+  const [newCats, setNewCats] = useState<OccurrenceCategory[]>([]);
 
   const cols: Encaminhamento['status'][] = ['Pendente', 'Em Andamento', 'Concluído'];
 
@@ -1118,10 +1124,29 @@ function MonitoramentoBoard({ store }: { store: ReturnType<typeof useLocalStore>
   const addNota = () => {
     if (!selected || !nota.trim()) return;
     setEncaminhamentos(enc => enc.map(e => e.id === selected.id ? {
-      ...e, notas: [{ date: new Date().toISOString(), author: store.users.find(u=>u.id===selected.rondaId)?.name ?? 'Técnico', text: nota.trim() }, ...e.notas]
+      ...e, notas: [{ date: new Date().toISOString(), author: 'Monitoramento', text: nota.trim() }, ...e.notas]
     } : e));
     setNota('');
     toast.success('Nota adicionada.');
+  };
+  const criarChamado = () => {
+    if (!newTitulo.trim()) { toast.error('Digite um título para o chamado.'); return; }
+    const escola = SCHOOLS.find(s => s.id === newSchool);
+    const enc: Encaminhamento = {
+      id: `enc-${Date.now()}`,
+      rondaId: '',
+      schoolName: escola?.name ?? '',
+      titulo: newTitulo.trim(),
+      categorias: newCats,
+      date: new Date().toISOString(),
+      status: 'Pendente',
+      notas: [{ date: new Date().toISOString(), author: 'Sistema', text: `Chamado aberto para ${escola?.name}` }]
+    };
+    setEncaminhamentos(es => [enc, ...es]);
+    setNewTitulo('');
+    setNewCats([]);
+    setShowForm(false);
+    toast.success('Chamado aberto com sucesso.');
   };
 
   return (
@@ -1131,8 +1156,50 @@ function MonitoramentoBoard({ store }: { store: ReturnType<typeof useLocalStore>
           <h2 className="text-[28px] tracking-tight" style={{ fontFamily: 'Fraunces, serif', fontWeight: 700 }}>Monitoramento</h2>
           <div className="text-[13.2px] text-[#576863]">Chamados abertos • acompanhe e atenda as ocorrências</div>
         </div>
-        <div className="text-[11.8px] text-[#8a735f]" style={{ fontFamily: 'Fragment Mono, monospace' }}>{encaminhamentos.filter(e=>e.status!=='Concluído').length} ATIVOS</div>
+        <div className="flex items-center gap-3">
+          <div className="text-[11.8px] text-[#8a735f]" style={{ fontFamily: 'Fragment Mono, monospace' }}>{encaminhamentos.filter(e=>e.status!=='Concluído').length} ATIVOS</div>
+          <button onClick={()=>setShowForm(!showForm)}
+            className="text-[12.8px] px-4 py-2 rounded-full bg-[#1a3531] text-[#f1dec2] font-[680] hover:bg-[#244a43] transition">
+            {showForm ? 'Cancelar' : '+ Novo chamado'}
+          </button>
+        </div>
       </div>
+
+      {showForm && (
+        <div className="rounded-[22px] bg-[#fffdf8] ring-1 ring-[#e2c6a6] p-5 md:p-6">
+          <div className="text-[15.8px] font-[740] mb-4" style={{ fontFamily: 'Fraunces, serif' }}>Abrir chamado</div>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <div className="text-[11.4px] text-[#7a6551] mb-1.5">Escola</div>
+              <select value={newSchool} onChange={e=>setNewSchool(e.target.value)}
+                className="w-full bg-[#f8f0e2] ring-1 ring-[#dfc5a3] rounded-[12px] px-3 py-2.5 text-[13.6px] outline-none">
+                {SCHOOLS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <div className="text-[11.4px] text-[#7a6551] mb-1.5">Título do chamado</div>
+              <input value={newTitulo} onChange={e=>setNewTitulo(e.target.value)}
+                className="w-full bg-[#f8f0e2] ring-1 ring-[#dfc5a3] rounded-[12px] px-3 py-2.5 text-[13.6px] outline-none"
+                placeholder="Ex: Problema no portão" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-[11.4px] text-[#7a6551] mb-1.5">Categorias</div>
+            <div className="flex flex-wrap gap-1.5">
+              {CATEGORIAS.map(c => (
+                <button key={c.key} type="button" onClick={()=>setNewCats(cs => cs.includes(c.key) ? cs.filter(x=>x!==c.key) : [...cs, c.key])}
+                  className={`text-[11.8px] px-3 py-1.5 rounded-full transition ${newCats.includes(c.key) ? 'bg-[#1a3531] text-[#f1dec2]' : 'bg-[#f1e2cf] text-[#694a2f]'}`}>
+                  {c.key}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button onClick={criarChamado}
+            className="mt-4 px-6 py-2.5 rounded-[12px] bg-[#1b3b35] text-[#f0e1c7] font-[700] text-[13.6px] hover:bg-[#244a43] transition">
+            Abrir chamado
+          </button>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-[1.16fr_0.84fr] gap-6">
         <div className="grid md:grid-cols-3 gap-4">
@@ -1189,9 +1256,10 @@ function MonitoramentoBoard({ store }: { store: ReturnType<typeof useLocalStore>
                 </div>
               </div>
               <div className="mt-4 text-[12.4px] text-[#5f7069]">
-                Ronda: {selected.rondaId} • {new Date(selected.date).toLocaleString('pt-BR')}
+                {selected.rondaId ? <>Ronda: {selected.rondaId} • {new Date(selected.date).toLocaleString('pt-BR')}</> : <>Aberto em {new Date(selected.date).toLocaleString('pt-BR')}</>}
                 <br />
                 {(() => {
+                  if (!selected.rondaId) return null;
                   const r = rondas.find(r=>r.id===selected.rondaId);
                   return r ? <>Técnico: {r.tecnicoName} • Prioridade: <PriorityPill p={r.prioridade} /></> : null
                 })()}
@@ -1384,9 +1452,22 @@ function NovaRonda({ store, currentUser, onSaved }: { store: ReturnType<typeof u
       audioDescription, observacoes, prioridade, status: 'registrada'
     };
     store.setRondas(rs => [ronda, ...rs]);
+    // Auto-criar chamado no monitoramento
+    const escola = SCHOOLS.find(s => s.id === schoolId);
+    const enc: Encaminhamento = {
+      id: `enc-${Date.now()}`,
+      rondaId: id,
+      schoolName: escola?.name ?? '',
+      titulo: selectedCats.join(' · '),
+      categorias: selectedCats,
+      date: new Date().toISOString(),
+      status: 'Pendente',
+      notas: [{ date: new Date().toISOString(), author: currentUser.name, text: `Ronda registrada: ${observacoes || audioDescription || 'Sem descrição'}` }]
+    };
+    store.setEncaminhamentos(es => [enc, ...es]);
     await upsertUsers(store.users);
     await insertRonda(ronda);
-    toast.success('Ronda finalizada e enviada para a coordenação.');
+    toast.success('Ronda enviada — chamado aberto na coordenação.');
     setSelectedCats([]); setObservacoes(''); setAudioDescription(''); setAudioUrl(null); setPrioridade('Baixa');
     onSaved();
   };
