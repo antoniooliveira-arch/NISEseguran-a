@@ -439,7 +439,7 @@ function AdminApp({ currentUser, onLogout, store }: { currentUser: User; onLogou
             <motion.div key={view} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .22 }}>
               {view === 'dashboard' && <AdminDashboard store={store} onOpenEnc={()=>setView('encaminhamentos')} />}
               {view === 'rondas' && <RondasList store={store} admin />}
-              {view === 'monitoramento' && <MonitoramentoBoard store={store} />}
+              {view === 'monitoramento' && <MonitoramentoBoard store={store} currentUser={currentUser} />}
               {view === 'encaminhamentos' && <EncaminhamentosBoard store={store} />}
               {view === 'relatorios' && <RelatoriosView store={store} />}
               {view === 'usuarios' && <UsuariosView store={store} />}
@@ -1115,7 +1115,7 @@ function Field({ label, value, onChange, type }: { label: string; value: string;
 }
 
 /* ---------- Monitoramento (Técnico) ---------- */
-function MonitoramentoBoard({ store }: { store: ReturnType<typeof useLocalStore> }) {
+function MonitoramentoBoard({ store, currentUser }: { store: ReturnType<typeof useLocalStore>; currentUser?: User }) {
   const { encaminhamentos, setEncaminhamentos, rondas } = store;
   const [selected, setSelected] = useState<Encaminhamento | null>(null);
   const [nota, setNota] = useState('');
@@ -1196,7 +1196,7 @@ function MonitoramentoBoard({ store }: { store: ReturnType<typeof useLocalStore>
           <div className="mt-3">
             <div className="text-[11.4px] text-[#7a6551] mb-1.5">Categorias</div>
             <div className="flex flex-wrap gap-1.5">
-              {CATEGORIAS.map(c => (
+              {CATEGORIAS.filter(c => currentUser?.role === 'admin' || c.key !== 'Normalidade').map(c => (
                 <button key={c.key} type="button" onClick={()=>setNewCats(cs => cs.includes(c.key) ? cs.filter(x=>x!==c.key) : [...cs, c.key])}
                   className={`text-[11.8px] px-3 py-1.5 rounded-full transition ${newCats.includes(c.key) ? 'bg-[#1a3531] text-[#f1dec2]' : 'bg-[#f1e2cf] text-[#694a2f]'}`}>
                   {c.key}
@@ -1326,7 +1326,7 @@ function TecnicoApp({ currentUser, onLogout, store }: { currentUser: User; onLog
           <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
             {tab === 'nova' ? <NovaRonda store={store} currentUser={currentUser} onSaved={()=>setTab('historico')} /> :
              tab === 'historico' ? <RondasList store={{ ...store, rondas: store.rondas.filter(r => r.tecnicoId === currentUser.id) }} /> :
-             <MonitoramentoBoard store={store} />}
+             <MonitoramentoBoard store={store} currentUser={currentUser} />}
           </motion.div>
         </AnimatePresence>
       </main>
