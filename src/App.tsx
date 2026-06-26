@@ -601,12 +601,13 @@ function AdminDashboard({ store, onOpenEnc }: { store: ReturnType<typeof useLoca
                     <td className="py-3 pr-6 text-[#55645f]">{r.categories.join(', ')}</td>
                     <td className="py-3 pr-6">{r.tecnicoName.split(' ')[0]}</td>
                     <td className="py-3 pr-6"><PriorityPill p={r.prioridade}/></td>
-                    <td className="py-3 pr-6">
+                    <td className="py-3 pr-6 max-w-[180px]">
                       {r.audioBlobUrl ? (
                         <audio controls src={r.audioBlobUrl} className="h-7 w-28" />
                       ) : (
                         <span className="text-[11.4px] text-[#9a8268]">—</span>
                       )}
+                      {r.audioDescription && <div className="text-[11px] text-[#6f5f4e] mt-1 line-clamp-2 italic">{r.audioDescription}</div>}
                     </td>
                     <td className="py-3 pr-6 text-[#6e7c77]">{timeAgo(r.date)}</td>
                     <td className="py-3"><span className="text-[11.4px] px-2.5 py-1 rounded-full bg-[#f2e5d2] text-[#68513a]">{r.status}</span></td>
@@ -792,18 +793,29 @@ function EncaminhamentosBoard({ store }: { store: ReturnType<typeof useLocalStor
   const { encaminhamentos, setEncaminhamentos, rondas } = store;
   const [selected, setSelected] = useState<Encaminhamento | null>(encaminhamentos[0] ?? null);
   const [nota, setNota] = useState('');
+  const [concluirObs, setConcluirObs] = useState('');
 
   const cols: Encaminhamento['status'][] = ['Pendente', 'Em Andamento', 'Concluído'];
 
   const move = (id: string, status: Encaminhamento['status']) => {
-    setEncaminhamentos(enc => enc.map(e => e.id === id ? { ...e, status } : e));
+    if (status === 'Concluído' && !concluirObs.trim()) {
+      toast.error('Escreva as observações de conclusão.');
+      return;
+    }
+    setEncaminhamentos(enc => enc.map(e => e.id === id ? {
+      ...e, status,
+      notas: status === 'Concluído' && concluirObs.trim()
+        ? [{ date: new Date().toISOString(), author: 'Administrador', text: 'Concluído: ' + concluirObs.trim() }, ...e.notas]
+        : e.notas
+    } : e));
     setSelected(s => s && s.id === id ? { ...s, status } : s);
-    toast.success('Status atualizado.');
+    setConcluirObs('');
+    toast.success(status === 'Concluído' ? 'Chamado concluído.' : 'Status atualizado.');
   };
   const addNota = () => {
     if (!selected || !nota.trim()) return;
     setEncaminhamentos(enc => enc.map(e => e.id === selected.id ? {
-      ...e, notas: [{ date: new Date().toISOString(), author: 'Rita Carmona', text: nota.trim() }, ...e.notas]
+      ...e, notas: [{ date: new Date().toISOString(), author: 'Administrador', text: nota.trim() }, ...e.notas]
     } : e));
     setNota('');
     toast.success('Nota adicionada.');
@@ -850,10 +862,22 @@ function EncaminhamentosBoard({ store }: { store: ReturnType<typeof useLocalStor
               </div>
               <div className="flex flex-wrap gap-2 mb-5">
                 {cols.map(s=>(
-                  <button key={s} onClick={()=>move(selected.id, s)}
-                    className={`text-[12.4px] px-3.5 py-2 rounded-full ring-1 transition ${selected.status===s ? 'bg-[#1a3531] text-[#f1dec2] ring-[#1a3531]' : 'bg-[#fdf6ea] text-[#5a4531] ring-[#dec0a0] hover:bg-white'}`}>
-                    {s}
-                  </button>
+                  selected.status !== 'Concluído' && s === 'Concluído' ? (
+                    <div key={s} className="w-full space-y-2">
+                      <textarea value={concluirObs} onChange={e=>setConcluirObs(e.target.value)} rows={2}
+                        placeholder="Observações de conclusão…"
+                        className="w-full bg-[#f8f1e4] ring-1 ring-[#dfbd98] rounded-[11px] px-3 py-2 text-[13px] outline-none" />
+                      <button onClick={()=>move(selected.id, s)}
+                        className="w-full px-3.5 py-2 rounded-full bg-[#1a3531] text-[#f1dec2] text-[12.4px] font-[680] transition hover:bg-[#244a43]">
+                        Concluir chamado
+                      </button>
+                    </div>
+                  ) : (
+                    <button key={s} onClick={()=>move(selected.id, s)}
+                      className={`text-[12.4px] px-3.5 py-2 rounded-full ring-1 transition ${selected.status===s ? 'bg-[#1a3531] text-[#f1dec2] ring-[#1a3531]' : 'bg-[#fdf6ea] text-[#5a4531] ring-[#dec0a0] hover:bg-white'}`}>
+                      {s}
+                    </button>
+                  )
                 ))}
               </div>
               <div className="rounded-[16px] bg-[#fbf2e2] ring-1 ring-[#e7ccaa] p-4">
@@ -1001,7 +1025,7 @@ function UsuariosView({ store }: { store: ReturnType<typeof useLocalStore> }) {
   const [editing, setEditing] = useState<User | null>(null);
   const [form, setForm] = useState<{ name: string; role: UserRole; password: string }>({ name: '', role: 'tecnico', password: '' });
 
-  const genEmail = (name: string) => name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '.').replace(/\.+/g, '.').replace(/^\.|\.$/g, '') + '@nise.gov';
+  const genEmail = (name: string) => name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
   const save = () => {
     if (!form.name || !form.password) { toast.error('Preencha nome e senha.'); return; }
@@ -1078,9 +1102,111 @@ function Field({ label, value, onChange, type }: { label: string; value: string;
   );
 }
 
+/* ---------- Monitoramento (Técnico) ---------- */
+function MonitoramentoBoard({ store }: { store: ReturnType<typeof useLocalStore> }) {
+  const { encaminhamentos, setEncaminhamentos, rondas } = store;
+  const [selected, setSelected] = useState<Encaminhamento | null>(null);
+  const [nota, setNota] = useState('');
+
+  const cols: Encaminhamento['status'][] = ['Pendente', 'Em Andamento', 'Concluído'];
+
+  const move = (id: string, status: Encaminhamento['status']) => {
+    setEncaminhamentos(enc => enc.map(e => e.id === id ? { ...e, status } : e));
+    setSelected(s => s && s.id === id ? { ...s, status } : s);
+    toast.success('Status atualizado.');
+  };
+  const addNota = () => {
+    if (!selected || !nota.trim()) return;
+    setEncaminhamentos(enc => enc.map(e => e.id === selected.id ? {
+      ...e, notas: [{ date: new Date().toISOString(), author: store.users.find(u=>u.id===selected.rondaId)?.name ?? 'Técnico', text: nota.trim() }, ...e.notas]
+    } : e));
+    setNota('');
+    toast.success('Nota adicionada.');
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-[28px] tracking-tight" style={{ fontFamily: 'Fraunces, serif', fontWeight: 700 }}>Monitoramento</h2>
+          <div className="text-[13.2px] text-[#576863]">Chamados abertos • acompanhe e atenda as ocorrências</div>
+        </div>
+        <div className="text-[11.8px] text-[#8a735f]" style={{ fontFamily: 'Fragment Mono, monospace' }}>{encaminhamentos.filter(e=>e.status!=='Concluído').length} ATIVOS</div>
+      </div>
+
+      <div className="grid lg:grid-cols-[1.16fr_0.84fr] gap-6">
+        <div className="grid md:grid-cols-3 gap-4">
+          {cols.map(col => (
+            <div key={col} className="rounded-[22px] bg-[#fffdf8] ring-1 ring-[#e2c6a6] p-4 min-h-[400px]">
+              <div className="text-[12.8px] font-[740] text-[#3c4944] mb-3">{col} • {encaminhamentos.filter(e=>e.status===col).length}</div>
+              <div className="space-y-3">
+                {encaminhamentos.filter(e=>e.status===col).map(e => (
+                  <button key={e.id} onClick={()=>setSelected(e)}
+                    className={`w-full text-left rounded-[16px] bg-white ring-1 p-3.5 transition hover:ring-[#d6a87a] ${selected?.id===e.id ? 'ring-[#c94d21] shadow-[0_8px_22px_rgba(176,63,24,0.11)]' : 'ring-[#ead0b4]'}`}>
+                    <div className="text-[13px] font-[720] text-[#2a3531] line-clamp-1">{e.schoolName}</div>
+                    <div className="text-[12.2px] text-[#5f706a] line-clamp-1">{e.titulo}</div>
+                    <div className="text-[11.4px] text-[#8e7a63] mt-1.5">{timeAgo(e.date)}</div>
+                  </button>
+                ))}
+                {encaminhamentos.filter(e=>e.status===col).length===0 && (
+                  <div className="text-[12.4px] text-[#9d8670]">Nenhum item.</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-[24px] bg-white ring-1 ring-[#e2c6a6] p-6 shadow-[0_16px_38px_rgba(108,63,27,0.1)] h-fit sticky top-[92px]">
+          {!selected ? (
+            <div className="h-[320px] flex items-center justify-center text-[#9a8268] text-[14px]">Selecione um chamado.</div>
+          ) : (
+            <div>
+              <div className="text-[11.4px] tracking-wider text-[#ba4a22]" style={{ fontFamily: 'Fragment Mono, monospace' }}>CHAMADO {selected.id.toUpperCase()}</div>
+              <div className="text-[23px] mt-1.5" style={{ fontFamily: 'Fraunces, serif', fontWeight: 700 }}>{selected.schoolName}</div>
+              <div className="text-[13.7px] text-[#53645e] mb-2">{selected.titulo}</div>
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {selected.categorias.map(c=> <span key={c} className="text-[11.2px] bg-[#f1e1cc] text-[#68482d] px-2 py-1 rounded-full">{c}</span>)}
+              </div>
+              <div className="flex flex-wrap gap-2 mb-5">
+                {cols.map(s=>(
+                  <button key={s} onClick={()=>move(selected.id, s)}
+                    className={`text-[12.4px] px-3.5 py-2 rounded-full ring-1 transition ${selected.status===s ? 'bg-[#1a3531] text-[#f1dec2] ring-[#1a3531]' : 'bg-[#fdf6ea] text-[#5a4531] ring-[#dec0a0] hover:bg-white'}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+              <div className="rounded-[16px] bg-[#fbf2e2] ring-1 ring-[#e7ccaa] p-4">
+                <div className="text-[12.8px] font-[720] mb-2">Notas</div>
+                <div className="space-y-2.5 max-h-[190px] overflow-auto pr-1">
+                  { (encaminhamentos.find(e=>e.id===selected.id)?.notas ?? selected.notas).map((n, i)=>(
+                    <div key={i} className="text-[12.7px] text-[#485551]"><b>{n.author}</b> • {timeAgo(n.date)}<br/>{n.text}</div>
+                  ))}
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <input value={nota} onChange={e=>setNota(e.target.value)} placeholder="Adicionar nota…"
+                    className="flex-1 bg-white ring-1 ring-[#dfbd98] rounded-[11px] px-3 py-2 outline-none text-[13.2px]" />
+                  <button onClick={addNota} className="px-3.5 py-2 rounded-[11px] bg-[#1b3b35] text-[#f2e0c4] text-[12.7px] font-[680]">Salvar</button>
+                </div>
+              </div>
+              <div className="mt-4 text-[12.4px] text-[#5f7069]">
+                Ronda: {selected.rondaId} • {new Date(selected.date).toLocaleString('pt-BR')}
+                <br />
+                {(() => {
+                  const r = rondas.find(r=>r.id===selected.rondaId);
+                  return r ? <>Técnico: {r.tecnicoName} • Prioridade: <PriorityPill p={r.prioridade} /></> : null
+                })()}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- TECNICO APP ---------- */
 function TecnicoApp({ currentUser, onLogout, store }: { currentUser: User; onLogout: () => void; store: ReturnType<typeof useLocalStore> }) {
-  const [tab, setTab] = useState<'nova' | 'historico'>('nova');
+  const [tab, setTab] = useState<'nova' | 'historico' | 'monitoramento'>('nova');
 
   return (
     <div className="min-h-screen bg-[#f7f0e5] text-[#20312d]" style={{ fontFamily: 'Plus Jakarta Sans, system-ui, sans-serif' }}>
@@ -1105,13 +1231,16 @@ function TecnicoApp({ currentUser, onLogout, store }: { currentUser: User; onLog
         <div className="max-w-[1000px] mx-auto px-5 md:px-8 pb-3 flex gap-7 text-[13.7px]">
           <button onClick={()=>setTab('nova')} className={tab==='nova' ? 'font-[740] text-[#17322c]' : 'text-[#6b5b49]'}>Nova ronda</button>
           <button onClick={()=>setTab('historico')} className={tab==='historico' ? 'font-[740] text-[#17322c]' : 'text-[#6b5b49]'}>Histórico</button>
+          <button onClick={()=>setTab('monitoramento')} className={tab==='monitoramento' ? 'font-[740] text-[#17322c]' : 'text-[#6b5b49]'}>Monitoramento</button>
         </div>
       </header>
 
       <main className="max-w-[1000px] mx-auto px-5 md:px-8 py-8 md:py-11">
         <AnimatePresence mode="wait">
           <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-            {tab === 'nova' ? <NovaRonda store={store} currentUser={currentUser} onSaved={()=>setTab('historico')} /> : <RondasList store={{ ...store, rondas: store.rondas.filter(r => r.tecnicoId === currentUser.id) }} />}
+            {tab === 'nova' ? <NovaRonda store={store} currentUser={currentUser} onSaved={()=>setTab('historico')} /> :
+             tab === 'historico' ? <RondasList store={{ ...store, rondas: store.rondas.filter(r => r.tecnicoId === currentUser.id) }} /> :
+             <MonitoramentoBoard store={store} />}
           </motion.div>
         </AnimatePresence>
       </main>
