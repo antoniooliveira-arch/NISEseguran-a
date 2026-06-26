@@ -10,7 +10,7 @@ import autoTable from 'jspdf-autotable';
 
 export type UserRole = 'admin' | 'tecnico';
 export type User = { id: string; name: string; email: string; role: UserRole; password: string; active: boolean };
-export type OccurrenceCategory = 'Briga' | 'Cerca/Muro' | 'Bullying' | 'Pátio' | 'Área de Alimentação' | 'Cozinha' | 'Portão' | 'Celular';
+export type OccurrenceCategory = 'Briga' | 'Cerca/Muro' | 'Bullying' | 'Pátio' | 'Área de Alimentação' | 'Cozinha' | 'Portão' | 'Celular' | 'Normalidade';
 export type Ronda = {
   id: string; schoolId: string; tecnicoId: string; tecnicoName: string; date: string;
   categories: OccurrenceCategory[]; audioBlobUrl?: string | null; audioDescription: string;
@@ -53,6 +53,7 @@ const CATEGORIAS: { key: OccurrenceCategory; hint: string }[] = [
   { key: 'Cozinha', hint: 'Normas / equipamentos' },
   { key: 'Portão', hint: 'Controle de acesso' },
   { key: 'Celular', hint: 'Uso indevido / apreensão' },
+  { key: 'Normalidade', hint: 'Tudo dentro da normalidade' },
 ];
 
 const INIT_USERS: User[] = [
@@ -324,6 +325,7 @@ function LoginScreen({ onLogin }: { onLogin: (u: User) => void }) {
 function AdminApp({ currentUser, onLogout, store }: { currentUser: User; onLogout: () => void; store: ReturnType<typeof useLocalStore> }) {
   const [view, setView] = useState<'dashboard'|'rondas'|'encaminhamentos'|'relatorios'|'usuarios'|'monitoramento'>('dashboard');
   const [mobileMenu, setMobileMenu] = useState(false);
+  const openChamados = store.encaminhamentos.filter(e => e.status === 'Pendente' || e.status === 'Em Andamento').length;
 
   const nav = [
     { k: 'dashboard', label: 'Painel Tático', icon: I.layout },
@@ -360,6 +362,9 @@ function AdminApp({ currentUser, onLogout, store }: { currentUser: User; onLogou
                   className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-[14px] transition text-[13.8px] ${active ? 'bg-[#1a3531] text-[#f2e0c4] shadow-[0_8px_22px_rgba(21,46,42,0.2)]' : 'text-[#42514c] hover:bg-[#f2e4cf]'}`}>
                   <n.icon className="w-[18px] h-[18px] opacity-90" />
                   <span className={`${active ? 'font-[700]' : 'font-[560]'}`}>{n.label}</span>
+                  {n.k === 'monitoramento' && openChamados > 0 && (
+                    <span className="ml-auto text-[11px] font-[680] bg-[#c94d21] text-white px-2 py-0.5 rounded-full">{openChamados}</span>
+                  )}
                 </button>
               );
             })}
@@ -418,6 +423,9 @@ function AdminApp({ currentUser, onLogout, store }: { currentUser: User; onLogou
                     <button key={n.k} onClick={()=>{ setView(n.k as any); setMobileMenu(false); }}
                       className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-[13px] text-[14px] ${view===n.k ? 'bg-[#1a3531] text-[#f1ddc1]' : 'hover:bg-[#f1e0c8] text-[#37443f]'}`}>
                       <n.icon className="w-[18px] h-[18px]" /> {n.label}
+                      {n.k === 'monitoramento' && openChamados > 0 && (
+                        <span className="ml-auto text-[11px] font-[680] bg-[#c94d21] text-white px-2 py-0.5 rounded-full">{openChamados}</span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -463,7 +471,7 @@ function AdminDashboard({ store, onOpenEnc }: { store: ReturnType<typeof useLoca
 
   const catData = useMemo(() => {
     const counts: Record<OccurrenceCategory, number> = {
-      'Briga':0,'Cerca/Muro':0,'Bullying':0,'Pátio':0,'Área de Alimentação':0,'Cozinha':0,'Portão':0,'Celular':0
+      'Briga':0,'Cerca/Muro':0,'Bullying':0,'Pátio':0,'Área de Alimentação':0,'Cozinha':0,'Portão':0,'Celular':0,'Normalidade':0
     };
     rondas.forEach(r => r.categories.forEach(c => counts[c]++));
     return Object.entries(counts).map(([name, v]) => ({ name, v }));
@@ -840,6 +848,7 @@ function EncaminhamentosBoard({ store }: { store: ReturnType<typeof useLocalStor
                     className={`w-full text-left rounded-[16px] bg-white ring-1 p-3.5 transition hover:ring-[#d6a87a] ${selected?.id===e.id ? 'ring-[#c94d21] shadow-[0_8px_22px_rgba(176,63,24,0.11)]' : 'ring-[#ead0b4]'}`}>
                     <div className="text-[13px] font-[720] text-[#2a3531] line-clamp-1">{e.schoolName}</div>
                     <div className="text-[12.2px] text-[#5f706a] line-clamp-1">{e.titulo}</div>
+                    {e.notas?.[0]?.text && <div className="text-[11.2px] text-[#6e5f4e] line-clamp-2 mt-1">{e.notas[0].text}</div>}
                     <div className="text-[11.4px] text-[#8e7a63] mt-1.5">{timeAgo(e.date)}</div>
                   </button>
                 ))}
@@ -858,9 +867,10 @@ function EncaminhamentosBoard({ store }: { store: ReturnType<typeof useLocalStor
             <div>
               <div className="text-[11.4px] tracking-wider text-[#ba4a22]" style={{ fontFamily: 'Fragment Mono, monospace' }}>ENCAMINHAMENTO {selected.id.toUpperCase()}</div>
               <div className="text-[23px] mt-1.5" style={{ fontFamily: 'Fraunces, serif', fontWeight: 700 }}>{selected.schoolName}</div>
-              <div className="text-[13.7px] text-[#53645e] mb-2">{selected.titulo}</div>
+              <div className="text-[13.7px] text-[#53645e] mb-1">{selected.titulo}</div>
+              {selected.notas?.[0]?.text && <div className="text-[12px] text-[#6f5f4e] mb-3 line-clamp-3">{selected.notas[0].text}</div>}
               <div className="flex flex-wrap gap-1.5 mb-4">
-                {selected.categorias.map(c=> <span key={c} className="text-[11.2px] bg-[#f1e1cc] text-[#68482d] px-2 py-1 rounded-full">{c}</span>)}
+                {selected.categorias.map(c=> <span key={c} className={`text-[11.2px] ${c==='Normalidade' ? 'bg-[#d4edda] text-[#155724] font-[700]' : 'bg-[#f1e1cc] text-[#68482d]'} px-2 py-1 rounded-full`}>{c}</span>)}
               </div>
               <div className="flex flex-wrap gap-2 mb-5">
                 {cols.map(s=>(
@@ -1212,6 +1222,7 @@ function MonitoramentoBoard({ store }: { store: ReturnType<typeof useLocalStore>
                     className={`w-full text-left rounded-[16px] bg-white ring-1 p-3.5 transition hover:ring-[#d6a87a] ${selected?.id===e.id ? 'ring-[#c94d21] shadow-[0_8px_22px_rgba(176,63,24,0.11)]' : 'ring-[#ead0b4]'}`}>
                     <div className="text-[13px] font-[720] text-[#2a3531] line-clamp-1">{e.schoolName}</div>
                     <div className="text-[12.2px] text-[#5f706a] line-clamp-1">{e.titulo}</div>
+                    {e.notas?.[0]?.text && <div className="text-[11.2px] text-[#6e5f4e] line-clamp-2 mt-1">{e.notas[0].text}</div>}
                     <div className="text-[11.4px] text-[#8e7a63] mt-1.5">{timeAgo(e.date)}</div>
                   </button>
                 ))}
@@ -1230,9 +1241,10 @@ function MonitoramentoBoard({ store }: { store: ReturnType<typeof useLocalStore>
             <div>
               <div className="text-[11.4px] tracking-wider text-[#ba4a22]" style={{ fontFamily: 'Fragment Mono, monospace' }}>CHAMADO {selected.id.toUpperCase()}</div>
               <div className="text-[23px] mt-1.5" style={{ fontFamily: 'Fraunces, serif', fontWeight: 700 }}>{selected.schoolName}</div>
-              <div className="text-[13.7px] text-[#53645e] mb-2">{selected.titulo}</div>
+              <div className="text-[13.7px] text-[#53645e] mb-1">{selected.titulo}</div>
+              {selected.notas?.[0]?.text && <div className="text-[12px] text-[#6f5f4e] mb-3 line-clamp-3">{selected.notas[0].text}</div>}
               <div className="flex flex-wrap gap-1.5 mb-4">
-                {selected.categorias.map(c=> <span key={c} className="text-[11.2px] bg-[#f1e1cc] text-[#68482d] px-2 py-1 rounded-full">{c}</span>)}
+                {selected.categorias.map(c=> <span key={c} className={`text-[11.2px] ${c==='Normalidade' ? 'bg-[#d4edda] text-[#155724] font-[700]' : 'bg-[#f1e1cc] text-[#68482d]'} px-2 py-1 rounded-full`}>{c}</span>)}
               </div>
               <div className="flex flex-wrap gap-2 mb-5">
                 {cols.map(s=>(
@@ -1275,6 +1287,7 @@ function MonitoramentoBoard({ store }: { store: ReturnType<typeof useLocalStore>
 /* ---------- TECNICO APP ---------- */
 function TecnicoApp({ currentUser, onLogout, store }: { currentUser: User; onLogout: () => void; store: ReturnType<typeof useLocalStore> }) {
   const [tab, setTab] = useState<'nova' | 'historico' | 'monitoramento'>('nova');
+  const openChamados = store.encaminhamentos.filter(e => e.status === 'Pendente' || e.status === 'Em Andamento').length;
 
   return (
     <div className="min-h-screen bg-[#f7f0e5] text-[#20312d]" style={{ fontFamily: 'Plus Jakarta Sans, system-ui, sans-serif' }}>
@@ -1299,7 +1312,12 @@ function TecnicoApp({ currentUser, onLogout, store }: { currentUser: User; onLog
         <div className="max-w-[1000px] mx-auto px-5 md:px-8 pb-3 flex gap-7 text-[13.7px]">
           <button onClick={()=>setTab('nova')} className={tab==='nova' ? 'font-[740] text-[#17322c]' : 'text-[#6b5b49]'}>Nova ronda</button>
           <button onClick={()=>setTab('historico')} className={tab==='historico' ? 'font-[740] text-[#17322c]' : 'text-[#6b5b49]'}>Histórico</button>
-          <button onClick={()=>setTab('monitoramento')} className={tab==='monitoramento' ? 'font-[740] text-[#17322c]' : 'text-[#6b5b49]'}>Monitoramento</button>
+          <button onClick={()=>setTab('monitoramento')} className={`relative ${tab==='monitoramento' ? 'font-[740] text-[#17322c]' : 'text-[#6b5b49]'} ${openChamados > 0 && tab !== 'monitoramento' ? 'text-[#c94d21]' : ''}`}>
+            Monitoramento
+            {openChamados > 0 && (
+              <span className="ml-1.5 text-[11px] font-[680] bg-[#c94d21] text-white px-2 py-0.5 rounded-full align-middle">{openChamados}</span>
+            )}
+          </button>
         </div>
       </header>
 
