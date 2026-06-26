@@ -1521,7 +1521,7 @@ function NovaRonda({ store, currentUser, onSaved }: { store: ReturnType<typeof u
             <div>
               <div className="text-[12px] text-[#7a6552] font-[600]">2. Categorias de ocorrência</div>
               <div className="grid sm:grid-cols-2 gap-2.5 mt-2.5">
-                {CATEGORIAS.map(c => (
+                {CATEGORIAS.filter(c => c.key !== 'Normalidade').map(c => (
                   <button type="button" key={c.key} onClick={()=>toggleCat(c.key)}
                     className={`text-left rounded-[14px] px-4 py-3 ring-1 transition ${selectedCats.includes(c.key) ? 'bg-[#193835] text-[#f4e4c9] ring-[#193835] shadow-[0_8px_20px_rgba(22,52,46,0.18)]' : 'bg-[#f8f1e4] text-[#3d3228] ring-[#e3c8a7] hover:bg-[#f3e5ce]'}`}>
                     <div className="font-[720] text-[13.9px] flex items-center gap-2">
